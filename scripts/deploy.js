@@ -1,25 +1,23 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
 async function main() {
-  console.log("Starting deployment...");
+  console.log("Deploying contracts...");
 
-  // Deploy Verifier first
-  const Verifier = await hre.ethers.getContractFactory("Verifier");
-  console.log("Deploying Verifier...");
+  // Deploy Verifier
+  const Verifier = await ethers.getContractFactory("NFTMarketplaceVerifier");
   const verifier = await Verifier.deploy();
   await verifier.deployed();
   console.log("Verifier deployed to:", verifier.address);
 
-  // Deploy NFTMarketplace
-  const NFTMarketplace = await hre.ethers.getContractFactory("NFTMarketplace");
-  console.log("Deploying NFTMarketplace...");
+  // Deploy NFT Marketplace
+  const NFTMarketplace = await ethers.getContractFactory("NFTMarketplace");
   const marketplace = await NFTMarketplace.deploy(verifier.address);
   await marketplace.deployed();
   console.log("NFTMarketplace deployed to:", marketplace.address);
 
-  // Save deployment addresses
+  // Save deployment info
   const deploymentInfo = {
     verifier: verifier.address,
     marketplace: marketplace.address,
@@ -27,18 +25,19 @@ async function main() {
     timestamp: new Date().toISOString(),
   };
 
-  const deploymentPath = path.join(__dirname, "../deployment-info.json");
-  fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
-  console.log("Deployment info saved to:", deploymentPath);
+  const deployDir = path.join(__dirname, "../deployments");
+  if (!fs.existsSync(deployDir)) {
+    fs.mkdirSync(deployDir, { recursive: true });
+  }
 
-  // Verify contracts on Etherscan if not on localhost
-  if (hre.network.name !== "localhost" && hre.network.name !== "hardhat") {
-    console.log("Waiting for block confirmations...");
-    await verifier.deployTransaction.wait(6);
-    await marketplace.deployTransaction.wait(6);
+  fs.writeFileSync(
+    path.join(deployDir, `${hre.network.name}.json`),
+    JSON.stringify(deploymentInfo, null, 2)
+  );
 
-    console.log("Verifying contracts on Etherscan...");
-
+  // Verify contracts if on testnet/mainnet
+  if (hre.network.name !== "hardhat" && hre.network.name !== "localhost") {
+    console.log("Verifying contracts...");
     await hre.run("verify:verify", {
       address: verifier.address,
       constructorArguments: [],
@@ -49,13 +48,10 @@ async function main() {
       constructorArguments: [verifier.address],
     });
   }
-
-  console.log("Deployment completed successfully!");
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = { deploy: main };
